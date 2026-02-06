@@ -2,49 +2,32 @@
 
 installkernel() {
     # target kernel version dracut is building for
-    local kv="${kernel_version:-$(uname -r)}"
-    local moddir="/lib/modules/$kv"
+#     local kv="${kernel_version:-$(uname -r)}"
+    local moddir="$srcmods"
 
     if [[ ! -d "$moddir" ]]; then
         echo "Warning: no kernel modules dir: $moddir"
         return 1
     fi
 
-    # convert omit_drivers into an array
-    local omit_list=()
-    for d in $omit_drivers; do
-        omit_list+=("$d")
-    done
 
-    # helper to check if a driver is in omit list
-    omitempty() {
-        local drv="$1"
-        for o in "${omit_list[@]}"; do
-            [[ "$drv" == "$o" ]] && return 0
-        done
-        return 1
-    }
+    # If omit_drivers is unset or empty, treat as no omit filter
+    local omit_regex="${omit_drivers:-}"
 
-    # walk every .ko file and instmods it unless omitted
+    # Walk all .ko files under the modules directory
     while IFS= read -r file; do
-        # strip prefix and suffix
+        # get module name relative to modules dir, strip .ko suffix
         local mod="${file#$moddir/}"
         mod="${mod%.ko}"
 
-        # if exact match or wildcard in omit list, skip
-        # (use simple pattern matching for wildcards)
-        local skip=0
-        for pattern in "${omit_list[@]}"; do
-            if [[ "$mod" == $pattern ]]; then
-                skip=1
-                break
-            fi
-        done
-
-        (( skip )) && continue
+        # skip if module name matches omit_drivers regex
+        if [[ -n "$omit_regex" && "$mod" =~ $omit_regex ]]; then
+            continue
+        fi
 
         instmods "$mod"
     done < <(find "$moddir" -type f -name '*.ko')
+    
 }
 
 install() {
